@@ -1,0 +1,284 @@
+import java.io.*;
+import java.util.*;
+
+public class PassOneAssembler {
+
+    static class Symbol {
+        String name;
+        int address;
+        Symbol(String name, int address) {
+            this.name = name;
+            this.address = address;
+        }
+    }
+
+    static class Literal {
+        String value;
+        int address;
+        Literal(String value, int address) {
+            this.value = value;
+            this.address = address;
+        }
+    }
+
+    static List<Symbol> symbolTable = new ArrayList<>();
+    static List<Literal> literalTable = new ArrayList<>();
+    static List<Integer> poolTable = new ArrayList<>();
+
+    static int LC = 0;  // Location Counter
+    static int poolStart = 0;
+
+    // Writers for each file
+    static PrintWriter intermediateWriter;
+    static PrintWriter symbolWriter;
+    static PrintWriter literalWriter;
+    static PrintWriter poolWriter;
+
+    public static void main(String[] args) {
+        List<String> codeLines = new ArrayList<>();
+
+        // ---- STEP 1: Read input.asm ----
+        try (BufferedReader br = new BufferedReader(new FileReader("input.asm"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!line.trim().isEmpty())
+                    codeLines.add(line.trim());
+            }
+        } catch (IOException e) {
+            System.out.println("❌ Error: Cannot read input.asm. Make sure the file exists in the same folder.");
+            return;
+        }
+
+        // ---- STEP 2: Create output files ----
+        try {
+            intermediateWriter = new PrintWriter(new FileWriter("intermediate.txt"));
+            symbolWriter = new PrintWriter(new FileWriter("symbol_table.txt"));
+            literalWriter = new PrintWriter(new FileWriter("literal_table.txt"));
+            poolWriter = new PrintWriter(new FileWriter("pool_table.txt"));
+        } catch (IOException e) {
+            System.out.println("❌ Error creating output files.");
+            return;
+        }
+
+        poolTable.add(0); // First literal pool starts at index 0
+
+        // ---- STEP 3: Process each line ----
+        for (String line : codeLines) {
+            processLine(line);
+        }
+
+        // ---- STEP 4: Print all tables ----
+        writeTables();
+
+        // ---- STEP 5: Close all files ----
+        intermediateWriter.close();
+        symbolWriter.close();
+        literalWriter.close();
+        poolWriter.close();
+
+        System.out.println("✅ Pass One complete! Files generated:");
+        System.out.println("   • intermediate.txt");
+        System.out.println("   • symbol_table.txt");
+        System.out.println("   • literal_table.txt");
+        System.out.println("   • pool_table.txt");
+    }
+
+    // ---------------- PROCESSING LINES ----------------
+    static void processLine(String line) {
+        if (line.isEmpty()) return;
+
+        // START
+        if (line.startsWith("START")) {
+            LC = Integer.parseInt(line.substring(5).trim());
+            intermediateWriter.println("(AD,01) (C," + LC + ")");
+            return;
+        }
+
+        // END
+        if (line.startsWith("END")) {
+            assignLiterals();
+            intermediateWriter.println("(AD,02)");
+            return;
+        }
+
+        // LTORG
+        if (line.startsWith("LTORG")) {
+            assignLiterals();
+            intermediateWriter.println("(AD,04)");
+            return;
+        }
+
+        // ORIGIN
+        if (line.startsWith("ORIGIN")) {
+            String expr = line.split(" ")[1];
+            LC = evaluate(expr);
+            intermediateWriter.println("(AD,03) (C," + LC + ")");
+            return;
+        }
+
+        // EQU
+        if (line.contains("EQU")) {
+            String[] parts = line.split("EQU");
+            String symbol = parts[0].trim();
+            String expr = parts[1].trim();
+            int addr = evaluate(expr);
+            addSymbol(symbol, addr);
+            intermediateWriter.println("(AD,05) (C," + addr + ")");
+            return;
+        }
+
+        // DS
+        if (line.contains("DS")) {
+            String[] parts = line.split(" ");
+            String symbol = parts[0];
+            int size = Integer.parseInt(parts[2]);
+            addSymbol(symbol, LC);
+            intermediateWriter.println("(DL,01) (C," + size + ")");
+            LC += size;
+            return;
+        }
+
+        // DC
+        if (line.contains("DC")) {
+            String[] parts = line.split(" ");
+            String symbol = parts[0];
+            String value = parts[2].replace("'", "").replace("\"", "");
+            addSymbol(symbol, LC);
+            intermediateWriter.println("(DL,02) (C," + value + ")");
+            LC++;
+            return;
+        }
+
+        // Imperative statements
+        if (line.contains("MOVER") || line.contains("MOVEM") || line.contains("ADD") || line.contains("PRINT")) {
+            String[] parts = line.split("[ ,]+");
+
+            int index = 0;
+            if (!isMnemonic(parts[0])) {
+                addSymbol(parts[0], LC);
+                index = 1;
+            }
+
+            String opcode = parts[index].toUpperCase();
+
+            if (opcode.equals("PRINT")) {
+                String operand = parts[index + 1];
+                addSymbolIfNotExists(operand);
+                intermediateWriter.println("(IS,04) (S," + getSymbolIndex(operand) + ")");
+            } else {
+                String reg = parts[index + 1];
+                String operand = parts[index + 2];
+
+                if (operand.startsWith("='")) {
+                    addLiteral(operand);
+                    intermediateWriter.println("(IS,02) (" + reg + ") (L," + getLiteralIndex(operand) + ")");
+                } else {
+                    addSymbolIfNotExists(operand);
+                    intermediateWriter.println("(IS,01) (" + reg + ") (S," + getSymbolIndex(operand) + ")");
+                }
+            }
+            LC++;
+            return;
+        }
+    }
+
+    // ---------------- HELPER FUNCTIONS ----------------
+    static int evaluate(String expr) {
+        if (expr.contains("+")) {
+            String[] parts = expr.split("\\+");
+            String sym = parts[0].trim();
+            int val = Integer.parseInt(parts[1].trim());
+            return getSymbolAddress(sym) + val;
+        } else {
+            return getSymbolAddress(expr);
+        }
+    }
+
+    static void addSymbol(String name, int address) {
+        for (Symbol s : symbolTable) {
+            if (s.name.equals(name)) {
+                s.address = address;
+                return;
+            }
+        }
+        symbolTable.add(new Symbol(name, address));
+    }
+
+    static void addSymbolIfNotExists(String name) {
+        for (Symbol s : symbolTable) {
+            if (s.name.equals(name)) return;
+        }
+        symbolTable.add(new Symbol(name, -1));
+    }
+
+    static void addLiteral(String value) {
+        for (Literal l : literalTable) {
+            if (l.value.equals(value)) return;
+        }
+        literalTable.add(new Literal(value, -1));
+    }
+
+    static void assignLiterals() {
+        for (int i = poolStart; i < literalTable.size(); i++) {
+            Literal l = literalTable.get(i);
+            if (l.address == -1) {
+                l.address = LC;
+                LC++;
+            }
+        }
+        poolStart = literalTable.size();
+        poolTable.add(poolStart);
+    }
+
+    static int getSymbolAddress(String name) {
+        for (Symbol s : symbolTable) {
+            if (s.name.equals(name)) return s.address;
+        }
+        return 0;
+    }
+
+    static int getSymbolIndex(String name) {
+        for (int i = 0; i < symbolTable.size(); i++) {
+            if (symbolTable.get(i).name.equals(name)) return i + 1;
+        }
+        return -1;
+    }
+
+    static int getLiteralIndex(String value) {
+        for (int i = 0; i < literalTable.size(); i++) {
+            if (literalTable.get(i).value.equals(value)) return i + 1;
+        }
+        return -1;
+    }
+
+    static boolean isMnemonic(String word) {
+        String[] mnemonics = {"MOVER", "MOVEM", "ADD", "PRINT", "START", "END", "ORIGIN", "LTORG", "EQU", "DS", "DC"};
+        for (String m : mnemonics) {
+            if (word.equalsIgnoreCase(m)) return true;
+        }
+        return false;
+    }
+
+    // ---------------- OUTPUT TABLE WRITING ----------------
+    static void writeTables() {
+        // SYMBOL TABLE
+        symbolWriter.println("Index\tSymbol\tAddress");
+        for (int i = 0; i < symbolTable.size(); i++) {
+            Symbol s = symbolTable.get(i);
+            symbolWriter.println((i + 1) + "\t" + s.name + "\t" + s.address);
+        }
+
+        // LITERAL TABLE
+        literalWriter.println("Index\tLiteral\tAddress");
+        for (int i = 0; i < literalTable.size(); i++) {
+            Literal l = literalTable.get(i);
+            literalWriter.println((i + 1) + "\t" + l.value + "\t" + l.address);
+        }
+
+        // POOL TABLE
+        poolWriter.println("Pool No\tStart Index");
+        for (int i = 0; i < poolTable.size(); i++) {
+            poolWriter.println((i + 1) + "\t" + poolTable.get(i));
+        }
+    }
+}
