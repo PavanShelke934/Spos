@@ -1,0 +1,105 @@
+import java.util.*;
+
+class Process {
+    int pid, arrival, burst, priority;
+    int completion, turnaround, waiting;
+    boolean done = false;
+}
+
+public class Q17 {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        System.out.print("Enter number of processes: ");
+        int n = sc.nextInt();
+        Process[] p = new Process[n];
+
+        System.out.println("\nEnter Arrival Time, Burst Time and Priority for each process:");
+        for (int i = 0; i < n; i++) {
+            p[i] = new Process();
+            p[i].pid = i + 1;
+            System.out.print("P" + p[i].pid + ": ");
+            p[i].arrival = sc.nextInt();
+            p[i].burst = sc.nextInt();
+            p[i].priority = sc.nextInt();
+        }
+
+        fcfs(p, n);
+        priorityScheduling(p, n);
+
+        sc.close();
+    }
+
+    // ---------------- FCFS Scheduling ----------------
+    static void fcfs(Process[] p, int n) {
+        Arrays.sort(p, Comparator.comparingInt(a -> a.arrival));
+        int time = 0;
+        float totalTAT = 0, totalWT = 0;
+
+        System.out.println("\n===== FCFS Scheduling =====");
+        System.out.println("PID\tAT\tBT\tCT\tTAT\tWT");
+
+        for (int i = 0; i < n; i++) {
+            if (time < p[i].arrival)
+                time = p[i].arrival;
+            time += p[i].burst;
+            p[i].completion = time;
+            p[i].turnaround = p[i].completion - p[i].arrival;
+            p[i].waiting = p[i].turnaround - p[i].burst;
+            totalTAT += p[i].turnaround;
+            totalWT += p[i].waiting;
+
+            System.out.println("P" + p[i].pid + "\t" + p[i].arrival + "\t" + p[i].burst + "\t" +
+                               p[i].completion + "\t" + p[i].turnaround + "\t" + p[i].waiting);
+        }
+
+        System.out.printf("Average TAT = %.2f\n", totalTAT / n);
+        System.out.printf("Average WT  = %.2f\n", totalWT / n);
+    }
+
+    // ---------------- Priority (Non-Preemptive) Scheduling ----------------
+    static void priorityScheduling(Process[] p, int n) {
+        for (Process pr : p) pr.done = false;
+        int completed = 0, time = 0;
+        float totalTAT = 0, totalWT = 0;
+
+        System.out.println("\n===== Priority (Non-Preemptive) Scheduling =====");
+        System.out.println("PID\tAT\tBT\tPR\tCT\tTAT\tWT");
+
+        while (completed != n) {
+            int idx = -1;
+            int highestPriority = Integer.MAX_VALUE;
+
+            for (int i = 0; i < n; i++) {
+                if (!p[i].done && p[i].arrival <= time) {
+                    if (p[i].priority < highestPriority) {
+                        highestPriority = p[i].priority;
+                        idx = i;
+                    }
+                }
+            }
+
+            if (idx == -1) {
+                time++;
+                continue;
+            }
+
+            time += p[idx].burst;
+            p[idx].completion = time;
+            p[idx].turnaround = p[idx].completion - p[idx].arrival;
+            p[idx].waiting = p[idx].turnaround - p[idx].burst;
+            p[idx].done = true;
+            completed++;
+
+            totalTAT += p[idx].turnaround;
+            totalWT += p[idx].waiting;
+
+            System.out.println("P" + p[idx].pid + "\t" + p[idx].arrival + "\t" + p[idx].burst + "\t" +
+                               p[idx].priority + "\t" + p[idx].completion + "\t" +
+                               p[idx].turnaround + "\t" + p[idx].waiting);
+        }
+
+        System.out.printf("Average TAT = %.2f\n", totalTAT / n);
+        System.out.printf("Average WT  = %.2f\n", totalWT / n);
+    }
+}

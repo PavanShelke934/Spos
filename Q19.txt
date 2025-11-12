@@ -1,0 +1,80 @@
+import java.util.*;
+
+public class Q19 {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        // Input reference string
+        System.out.print("Enter number of pages in reference string: ");
+        int n = sc.nextInt();
+        int pages[] = new int[n];
+
+        System.out.println("Enter the page reference string:");
+        for (int i = 0; i < n; i++) {
+            pages[i] = sc.nextInt();
+        }
+
+        // Input number of frames
+        System.out.print("Enter number of frames: ");
+        int frames = sc.nextInt();
+
+        System.out.println("\n===== FIFO Page Replacement =====");
+        fifo(pages, frames);
+
+        System.out.println("\n===== LRU Page Replacement =====");
+        lru(pages, frames);
+
+        sc.close();
+    }
+
+    // ---------------- FIFO ----------------
+    public static void fifo(int[] pages, int frames) {
+        Set<Integer> memory = new HashSet<>();
+        Queue<Integer> queue = new LinkedList<>();
+        int faults = 0, hits = 0;
+
+        for (int page : pages) {
+            if (!memory.contains(page)) {
+                if (memory.size() == frames) {
+                    int removed = queue.poll();
+                    memory.remove(removed);
+                }
+                memory.add(page);
+                queue.add(page);
+                faults++;
+            } else {
+                hits++;
+            }
+            System.out.println("Page: " + page + " -> " + memory);
+        }
+
+        System.out.println("Total Page Faults: " + faults);
+        System.out.println("Total Page Hits: " + hits);
+        System.out.printf("Hit Ratio: %.2f\n", (hits * 1.0 / pages.length));
+    }
+
+    // ---------------- LRU ----------------
+    public static void lru(int[] pages, int frames) {
+        List<Integer> memory = new ArrayList<>();
+        int faults = 0, hits = 0;
+
+        for (int page : pages) {
+            if (memory.contains(page)) {
+                hits++;
+                memory.remove((Integer) page);
+                memory.add(page);
+            } else {
+                faults++;
+                if (memory.size() == frames) {
+                    memory.remove(0);
+                }
+                memory.add(page);
+            }
+            System.out.println("Page: " + page + " -> " + memory);
+        }
+
+        System.out.println("Total Page Faults: " + faults);
+        System.out.println("Total Page Hits: " + hits);
+        System.out.printf("Hit Ratio: %.2f\n", (hits * 1.0 / pages.length));
+    }
+}

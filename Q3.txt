@@ -1,0 +1,124 @@
+import java.util.*;
+
+class Process {
+    String pid;
+    int at, bt, ct, tat, wt, remaining;
+    boolean completed = false;
+
+    Process(String pid, int at, int bt) {
+        this.pid = pid;
+        this.at = at;
+        this.bt = bt;
+        this.remaining = bt;
+    }
+}
+
+public class Q3 {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        List<Process> processes = new ArrayList<>();
+
+        System.out.print("Enter number of processes: ");
+        int n = sc.nextInt();
+
+        // Taking user input for each process
+        for (int i = 0; i < n; i++) {
+            System.out.println("\nEnter details for Process " + (i + 1) + ":");
+            System.out.print("Process ID: ");
+            String pid = sc.next();
+            System.out.print("Arrival Time: ");
+            int at = sc.nextInt();
+            System.out.print("Burst Time: ");
+            int bt = sc.nextInt();
+
+            processes.add(new Process(pid, at, bt));
+        }
+
+        System.out.println("\n===== FCFS Scheduling =====");
+        fcfs(processes);
+
+        System.out.println("\n===== Preemptive SJF Scheduling =====");
+        sjfPreemptive(processes);
+
+        sc.close();
+    }
+
+    // ------------------- FCFS -------------------
+    static void fcfs(List<Process> list) {
+        List<Process> processes = new ArrayList<>();
+        for (Process p : list)
+            processes.add(new Process(p.pid, p.at, p.bt));
+
+        processes.sort(Comparator.comparingInt(p -> p.at));
+
+        int time = 0;
+        double totalWT = 0, totalTAT = 0;
+
+        for (Process p : processes) {
+            if (time < p.at) time = p.at; // handle idle CPU time
+            p.ct = time + p.bt;
+            p.tat = p.ct - p.at;
+            p.wt = p.tat - p.bt;
+            time = p.ct;
+
+            totalWT += p.wt;
+            totalTAT += p.tat;
+        }
+
+        System.out.println("PID\tAT\tBT\tCT\tTAT\tWT");
+        for (Process p : processes)
+            System.out.println(p.pid + "\t" + p.at + "\t" + p.bt + "\t" + p.ct + "\t" + p.tat + "\t" + p.wt);
+
+        System.out.printf("Average Waiting Time: %.2f\n", totalWT / processes.size());
+        System.out.printf("Average Turnaround Time: %.2f\n", totalTAT / processes.size());
+    }
+
+    // ------------------- Preemptive SJF -------------------
+    static void sjfPreemptive(List<Process> list) {
+        List<Process> processes = new ArrayList<>();
+        for (Process p : list)
+            processes.add(new Process(p.pid, p.at, p.bt));
+
+        int time = 0, completed = 0;
+        double totalWT = 0, totalTAT = 0;
+
+        while (completed != processes.size()) {
+            Process curr = null;
+            int minBT = Integer.MAX_VALUE;
+
+            // Find process with shortest remaining burst time
+            for (Process p : processes) {
+                if (p.at <= time && !p.completed && p.remaining < minBT) {
+                    minBT = p.remaining;
+                    curr = p;
+                }
+            }
+
+            if (curr == null) {
+                time++;
+                continue;
+            }
+
+            curr.remaining--;
+            time++;
+
+            if (curr.remaining == 0) {
+                curr.completed = true;
+                curr.ct = time;
+                curr.tat = curr.ct - curr.at;
+                curr.wt = curr.tat - curr.bt;
+
+                totalWT += curr.wt;
+                totalTAT += curr.tat;
+                completed++;
+            }
+        }
+
+        System.out.println("PID\tAT\tBT\tCT\tTAT\tWT");
+        for (Process p : processes)
+            System.out.println(p.pid + "\t" + p.at + "\t" + p.bt + "\t" + p.ct + "\t" + p.tat + "\t" + p.wt);
+
+        System.out.printf("Average Waiting Time: %.2f\n", totalWT / processes.size());
+        System.out.printf("Average Turnaround Time: %.2f\n", totalTAT / processes.size());
+    }
+}

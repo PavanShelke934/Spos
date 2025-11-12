@@ -1,0 +1,156 @@
+import java.util.*;
+
+public class Q2 {
+
+    static Map<String, Integer> MNT = new LinkedHashMap<>();  // keep insertion order
+    static List<String> MDT = new ArrayList<>();
+    static List<String> intermediateCode = new ArrayList<>();
+
+    static void pass1_macro(List<String> source) {
+        boolean inMacro = false;
+        int mdtIndex = 0;
+
+        for (int i = 0; i < source.size(); i++) {
+            String line = source.get(i).trim();//trim remove leading spaces
+        
+
+            if (line.isEmpty()) 
+               continue;
+
+            // Start of a macro definition
+            if (line.equalsIgnoreCase("MACRO")) {
+                inMacro = true; // next line should be macro header (name + params)
+                i++;
+                if (i >= source.size()) break;
+                String header = source.get(i).trim();
+                  // add header as first MDT entry for this macro
+                MDT.add(header);
+                String[] parts = header.split("\\s+");
+                String macroName = parts[0];
+                MNT.put(macroName, mdtIndex);
+                mdtIndex++;
+                continue;
+            }
+
+            // End of macro definition
+            if (line.equalsIgnoreCase("MEND")) {
+                // store MEND in MDT and end macro
+                MDT.add("MEND");
+                mdtIndex++;
+                inMacro = false;
+                continue;
+            }
+
+            // If currently inside a macro definition, add to MDT
+            if (inMacro) {
+                MDT.add(line);
+                mdtIndex++;
+            } else {
+                // Not in macro definition -> part of intermediate (non-macro) code
+                intermediateCode.add(line);
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        // Given input (from your problem)
+        List<String> source = Arrays.asList(
+            "START",
+            "MACRO",
+            "INCR &ARG3 &ARG2",
+            "ADD AREG &ARG1",
+            "MOVER BREG &ARG1",
+            "MEND",
+            "MACRO",
+            "PVG &ARG2 &ARG1",
+            "SUB AREG &ARG2",
+            "MOVER CREG & ARG1",
+            "MEND",
+            "INCR",
+            "DECR",
+            "DATA2",
+            "END"
+        );
+
+        pass1_macro(source);
+
+        // Print results
+        System.out.println("===== MNT (Macro Name Table) =====");
+        for (Map.Entry<String, Integer> e : MNT.entrySet()) {
+            System.out.printf("%-10s -> MDT index %d%n", e.getKey(), e.getValue());
+        }
+
+        System.out.println("\n===== MDT (Macro Definition Table) =====");
+        for (int i = 0; i < MDT.size(); i++) {
+            System.out.printf("%3d: %s%n", i, MDT.get(i));
+        }
+
+        System.out.println("\n===== Intermediate Code =====");
+        for (String s : intermediateCode) {
+            System.out.println(s);
+        }
+    }
+}
+
+
+
+/*
+What is Pass-I in Macro Processor?
+
+A macro processor is a program that allows you to define macros — reusable sets of instructions that can be
+ inserted into your assembly code by name.
+
+A two-pass macro processor works in two stages:
+
+Pass-I:
+→ Identifies macros, stores their definitions in tables (MNT, MDT)
+→ Produces an intermediate code (original source without macro definitions).
+
+Pass-II:
+→ Expands (replaces) macro calls using the information stored during Pass-I.
+
+So, Pass-I’s job = build tables & remove macro definitions.
+
+🧩 DATA STRUCTURES USED
+1. MNT (Macro Name Table)
+
+Type: Map<String, Integer>
+
+Stores macro name and the starting index of that macro in MDT.
+
+Example:
+
+INCR → 0
+PVG  → 4
+
+2. MDT (Macro Definition Table)
+
+Type: List<String>
+
+Stores each line of macro definitions (header, body, and MEND).
+
+Example:
+
+0: INCR &ARG3 &ARG2
+1: ADD AREG &ARG1
+2: MOVER BREG &ARG1
+3: MEND
+4: PVG &ARG2 &ARG1
+5: SUB AREG &ARG2
+6: MOVER CREG &ARG1
+7: MEND
+
+3. Intermediate Code
+
+Type: List<String>
+
+Contains all source code lines except macro definitions.
+
+Example:
+
+START
+INCR
+DECR
+DATA2
+END
+*/

@@ -1,0 +1,111 @@
+import java.io.*;
+import java.util.*;
+
+class MNTEntry {
+    String name;
+    int pp, kp, mdtp, kpdtp;
+
+    MNTEntry(String name, int pp, int kp, int mdtp, int kpdtp) {
+        this.name = name;
+        this.pp = pp;
+        this.kp = kp;
+        this.mdtp = mdtp;
+        this.kpdtp = kpdtp;
+    }
+}
+
+public class Q9 {
+    static Map<String, MNTEntry> MNT = new HashMap<>();
+    static List<String> MDT = new ArrayList<>();
+
+    public static void main(String[] args) throws Exception {
+        // Load tables
+        loadMNT("Mnt.txt");
+        loadMDT("Mdt.txt");
+
+        System.out.println("===== Pass-II of Macro Processor =====\n");
+        processIntermediate("Intermediate.txt");
+    }
+
+    // ---------- Load MNT Table ----------
+    static void loadMNT(String filename) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            String[] parts = line.split("\\s+");
+            if (parts.length >= 5) {
+                String name = parts[0];
+                int pp = Integer.parseInt(parts[1]);
+                int kp = Integer.parseInt(parts[2]);
+                int mdtp = Integer.parseInt(parts[3]);
+                int kpdtp = Integer.parseInt(parts[4]);
+                MNT.put(name, new MNTEntry(name, pp, kp, mdtp, kpdtp));
+            }
+        }
+        br.close();
+    }
+
+    // ---------- Load MDT Table ----------
+    static void loadMDT(String filename) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+        while ((line = br.readLine()) != null) {
+            MDT.add(line.trim());
+        }
+        br.close();
+    }
+
+    // ---------- Process Intermediate File ----------
+    static void processIntermediate(String filename) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+
+            String[] parts = line.split("\\s+", 2);
+            String macroName = parts[0];
+
+            if (!MNT.containsKey(macroName)) {
+                System.out.println(line);
+                continue;
+            }
+
+            // Split arguments
+            String[] args = parts[1].split(",");
+            MNTEntry mntEntry = MNT.get(macroName);
+
+            // Map actual arguments to #1, #2, ...
+            Map<String, String> argumentMap = new HashMap<>();
+            for (int i = 0; i < args.length; i++) {
+                argumentMap.put("#" + (i + 1), args[i].trim());
+            }
+
+            expandMacro(mntEntry, argumentMap);
+        }
+
+        br.close();
+    }
+
+    // ---------- Expand Macro ----------
+    static void expandMacro(MNTEntry mnt, Map<String, String> args) {
+        int index = mnt.mdtp - 1; // MDT pointer is 1-based
+        System.out.println("\nExpanded Macro: " + mnt.name);
+
+        while (index < MDT.size()) {
+            String line = MDT.get(index);
+            if (line.equalsIgnoreCase("MEND")) break;
+
+            // Replace parameters (#1, #2, etc.)
+            for (String key : args.keySet()) {
+                line = line.replace(key, args.get(key));
+            }
+
+            System.out.println(" " + line);
+            index++;
+        }
+    }
+}

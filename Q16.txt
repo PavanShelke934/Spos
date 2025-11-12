@@ -1,0 +1,118 @@
+import java.io.*;
+import java.util.*;
+
+class Macro {
+    String name;
+    int positionalCount, keywordCount, mdtIndex, kpdtIndex;
+    Macro(String name, int p, int k, int mdt, int kpdt) {
+        this.name = name;
+        this.positionalCount = p;
+        this.keywordCount = k;
+        this.mdtIndex = mdt;
+        this.kpdtIndex = kpdt;
+    }
+}
+
+public class Q16 {
+    static Map<String, Macro> MNT = new LinkedHashMap<>();
+    static List<String> MDT = new ArrayList<>();
+
+    public static void main(String[] args) {
+        try {
+            loadMNT("Mnt.txt");
+            loadMDT("Mdt.txt");
+
+            BufferedReader br = new BufferedReader(new FileReader("Intermediate.txt"));
+            BufferedWriter bw = new BufferedWriter(new FileWriter("ExpandedCode.txt"));
+
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                String[] parts = line.split("\\s+", 2);
+                String macroName = parts[0];
+                String arguments = parts.length > 1 ? parts[1] : "";
+
+                if (!MNT.containsKey(macroName)) {
+                    bw.write(line + "\n"); // not a macro
+                    continue;
+                }
+
+                Macro macro = MNT.get(macroName);
+                expandMacro(macro, arguments, bw);
+            }
+
+            br.close();
+            bw.close();
+
+            System.out.println("✅ Pass-II completed. Output written to ExpandedCode.txt");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Load MNT (Macro Name Table)
+    static void loadMNT(String filename) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            String[] parts = line.split("\\s+");
+            if (parts.length >= 5) {
+                MNT.put(parts[0], new Macro(parts[0],
+                        Integer.parseInt(parts[1]),
+                        Integer.parseInt(parts[2]),
+                        Integer.parseInt(parts[3]),
+                        Integer.parseInt(parts[4])));
+            }
+        }
+        br.close();
+    }
+
+    // Load MDT (Macro Definition Table)
+    static void loadMDT(String filename) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filename));
+        String line;
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (!line.isEmpty())
+                MDT.add(line);
+        }
+        br.close();
+    }
+
+    // Expand macro from MDT using arguments
+    static void expandMacro(Macro macro, String argString, BufferedWriter bw) throws IOException {
+        String[] args = argString.split(",");
+        Map<String, String> argMap = new LinkedHashMap<>();
+
+        // Assign positional parameters (#1, #2, etc.)
+        for (int i = 0; i < args.length; i++) {
+            String val = args[i].trim();
+            if (val.contains("=")) {
+                // Handle keyword arguments (e.g., &b=CREG)
+                String[] kv = val.split("=");
+                argMap.put(kv[0].trim(), kv[1].trim());
+            } else {
+                argMap.put("#" + (i + 1), val);
+            }
+        }
+
+        // Iterate through MDT starting from macro.mdtIndex
+        for (int i = macro.mdtIndex - 1; i < MDT.size(); i++) {
+            String line = MDT.get(i);
+            if (line.equalsIgnoreCase("MEND")) break;
+
+            String expanded = line;
+            // Replace positional (#1, #2...) and keyword (&x)
+            for (Map.Entry<String, String> e : argMap.entrySet()) {
+                expanded = expanded.replace(e.getKey(), e.getValue());
+            }
+
+            bw.write(expanded + "\n");
+        }
+    }
+}

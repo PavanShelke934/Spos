@@ -1,0 +1,220 @@
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.regex.*;
+
+class Symbol {
+    String name;
+    int address;
+    Symbol(String name, int address) { this.name = name; this.address = address; }
+}
+
+class Literal {
+    String token;
+    int address;
+    Literal(String token, int address) { this.token = token; this.address = address; }
+}
+
+public class Q5 {
+    static final String INTERMEDIATE = "Intermediate.txt";
+    static final String LITTAB = "Littab.txt";
+    static final String SYMTAB = "Symtab.txt";
+    static final String OUTFILE = "MachineCode.txt";
+
+    // 1-based lists: index 0 unused so that (S,1) maps to index 1
+    static List<Symbol> symtabByIndex = new ArrayList<>();
+    static List<Literal> littabByIndex = new ArrayList<>();
+    static List<String> outputLines = new ArrayList<>();
+
+    public static void main(String[] args) {
+        try {
+            loadLiteralTable(LITTAB);
+            loadSymbolTable(SYMTAB);
+            processIntermediate(INTERMEDIATE);
+            writeOutput(OUTFILE);
+            System.out.println("Pass-II complete. Machine code written to: " + OUTFILE);
+            System.out.println("\n=== Produced machine code ===");
+            outputLines.forEach(System.out::println);
+        } catch (Exception e) {
+            System.err.println("Error during Pass-II: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    // Load Littab: expect lines like: <literal> <address>
+    static void loadLiteralTable(String filename) throws IOException {
+        littabByIndex.add(null); // index 0 unused
+        List<String> lines = Files.readAllLines(Paths.get(filename));
+        for (String raw : lines) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+            String[] parts = line.split("\\s+");
+            if (parts.length >= 2) {
+                String token = parts[0];
+                int addr = Integer.parseInt(parts[1]);
+                littabByIndex.add(new Literal(token, addr));
+            } else {
+                throw new IOException("Invalid literal line: '" + line + "'");
+            }
+        }
+    }
+
+    // Load Symtab: each non-empty line -> take first token as name, last token as address
+    static void loadSymbolTable(String filename) throws IOException {
+        symtabByIndex.add(null); // index 0 unused
+        List<String> lines = Files.readAllLines(Paths.get(filename));
+        for (String raw : lines) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+            String[] parts = line.split("\\s+");
+            if (parts.length >= 2) {
+                String name = parts[0];
+                String last = parts[parts.length - 1];
+                int addr = Integer.parseInt(last);
+                symtabByIndex.add(new Symbol(name, addr));
+            } else {
+                throw new IOException("Invalid symtab line: '" + line + "'");
+            }
+        }
+    }
+
+    // Process Intermediate file and produce machine code lines
+    static void processIntermediate(String filename) throws IOException {
+        List<String> lines = Files.readAllLines(Paths.get(filename));
+        // regex: match a parenthesized token optionally followed by +n or -n, e.g. (S,2)+2
+        Pattern tokenPattern = Pattern.compile("\\([^)]*\\)(?:[+-]\\d+)?");
+        for (String raw : lines) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+
+            Matcher m = tokenPattern.matcher(line);
+            List<String> tokens = new ArrayList<>();
+            while (m.find()) tokens.add(m.group());
+
+            if (tokens.isEmpty()) continue;
+
+            String first = tokens.get(0);
+            String firstInner = inner(first); // e.g., "IS,04" or "DL,01" or "AD,01"
+            String[] firstParts = firstInner.split(",", 2);
+            String type = firstParts[0].trim().toUpperCase(); // IS / DL / AD
+            String code = (firstParts.length > 1) ? firstParts[1].trim() : "";
+
+            // default machine fields
+            String opcode = "00";
+            String regField = "0";
+            String addrField = "0";
+
+            if (type.equals("IS")) {
+                opcode = code; // e.g., "04"
+                int operandIndex = 1; // first operand is register usually
+                for (int t = 1; t < tokens.size(); t++) {
+                    String tkWithOffset = tokens.get(t);
+                    // separate base token and offset (+k or -k)
+                    String baseToken = tkWithOffset;
+                    int offset = 0;
+                    Matcher off = Pattern.compile("(.+?)([+-]\\d+)$").matcher(tkWithOffset);
+                    if (off.matches()) {
+                        baseToken = off.group(1);
+                        offset = Integer.parseInt(off.group(2));
+                    }
+                    String innerTk = inner(baseToken); // e.g., "1", "S,2", "L,1", "C,200"
+
+                    if (!innerTk.contains(",")) {
+                        // plain number -> treat as register if first operand else as immediate
+                        if (operandIndex == 1) regField = innerTk.trim();
+                        else addrField = innerTk.trim();
+                    } else {
+                        String[] parts = innerTk.split(",", 2);
+                        String ktype = parts[0].trim().toUpperCase();
+                        String kval = parts[1].trim();
+
+                        switch (ktype) {
+                            case "R": // explicit register form (if any)
+                                if (operandIndex == 1) regField = kval; else addrField = kval;
+                                break;
+                            case "C": // constant
+                                addrField = String.valueOf(Integer.parseInt(kval) + offset);
+                                break;
+                            case "S": // symbol by index
+                                int symIndex = Integer.parseInt(kval);
+                                if (symIndex > 0 && symIndex < symtabByIndex.size()) {
+                                    addrField = String.valueOf(symtabByIndex.get(symIndex).address + offset);
+                                } else {
+                                    addrField = "0";
+                                }
+                                break;
+                            case "L": // literal by index
+                                int litIndex = Integer.parseInt(kval);
+                                if (litIndex > 0 && litIndex < littabByIndex.size()) {
+                                    addrField = String.valueOf(littabByIndex.get(litIndex).address + offset);
+                                } else {
+                                    addrField = "0";
+                                }
+                                break;
+                            default:
+                                // fallback: place raw value
+                                addrField = kval;
+                                break;
+                        }
+                    }
+                    operandIndex++;
+                }
+
+                String out = String.format("%s %s %s", pad(opcode,2), pad(regField,1), pad(addrField,3));
+                outputLines.add(out);
+
+            } else if (type.equals("DL")) {
+                // Declarative: e.g., (DL,01)(C,5) => DC 5
+                if (tokens.size() > 1) {
+                    String innerTk = inner(tokens.get(1));
+                    if (innerTk.startsWith("C,")) {
+                        String val = innerTk.split(",",2)[1].trim();
+                        String out = String.format("%s %s %s", pad("00",2), pad("0",1), pad(val,3));
+                        outputLines.add(out);
+                    } else {
+                        // fallback placeholder
+                        String out = String.format("%s %s %s", pad("00",2), pad("0",1), pad("0",3));
+                        outputLines.add(out);
+                    }
+                } else {
+                    String out = String.format("%s %s %s", pad("00",2), pad("0",1), pad("0",3));
+                    outputLines.add(out);
+                }
+            } else if (type.equals("AD")) {
+                // Assembler directive — typically no machine code generated.
+                // However some AD entries may include expressions like (AD,03)(S,2)+2 which affect addresses.
+                // For Pass-II we skip output for AD.
+                continue;
+            } else {
+                // unknown token type -> comment into output (optional)
+                outputLines.add("; Unknown record: " + line);
+            }
+        }
+    }
+
+    // extract inner content between '(' and ')'
+    static String inner(String token) {
+        token = token.trim();
+        if (token.startsWith("(") && token.contains(")")) {
+            int end = token.indexOf(')');
+            return token.substring(1, end).trim();
+        }
+        return token;
+    }
+
+    // pad numeric strings with leading zeros to width (if numeric), else left-pad with spaces
+    static String pad(String s, int width) {
+        s = s.trim();
+        try {
+            int v = Integer.parseInt(s);
+            return String.format("%0" + width + "d", v);
+        } catch (NumberFormatException e) {
+            if (s.length() >= width) return s;
+            return String.format("%" + width + "s", s);
+        }
+    }
+
+    static void writeOutput(String filename) throws IOException {
+        Files.write(Paths.get(filename), outputLines);
+    }
+}

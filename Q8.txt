@@ -1,0 +1,126 @@
+import java.util.*;
+
+class Process {
+    String pid;
+    int arrivalTime, burstTime, remainingTime, completionTime, waitingTime, turnaroundTime;
+
+    Process(String pid, int arrivalTime, int burstTime) {
+        this.pid = pid;
+        this.arrivalTime = arrivalTime;
+        this.burstTime = burstTime;
+        this.remainingTime = burstTime;
+    }
+}
+
+public class Q8 {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        System.out.print("Enter number of processes: ");
+        int n = sc.nextInt();
+
+        List<Process> processes = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            System.out.print("Enter Process ID: ");
+            String pid = sc.next();
+            System.out.print("Enter Arrival Time: ");
+            int at = sc.nextInt();
+            System.out.print("Enter Burst Time: ");
+            int bt = sc.nextInt();
+            processes.add(new Process(pid, at, bt));
+        }
+
+        System.out.println("\n===== FCFS Scheduling =====");
+        fcfs(new ArrayList<>(processes));
+
+        System.out.println("\n===== Round Robin Scheduling (Time Quantum = 2) =====");
+        rr(new ArrayList<>(processes), 2);
+
+        sc.close();
+    }
+
+    // ---------------- FCFS Algorithm ----------------
+    public static void fcfs(List<Process> processes) {
+        processes.sort(Comparator.comparingInt(p -> p.arrivalTime));
+
+        int currentTime = 0;
+        for (Process p : processes) {
+            if (currentTime < p.arrivalTime)
+                currentTime = p.arrivalTime;
+            p.completionTime = currentTime + p.burstTime;
+            currentTime += p.burstTime;
+            p.turnaroundTime = p.completionTime - p.arrivalTime;
+            p.waitingTime = p.turnaroundTime - p.burstTime;
+        }
+
+        printResults(processes);
+    }
+
+    // ---------------- Round Robin Algorithm ----------------
+    public static void rr(List<Process> processes, int timeQuantum) {
+        processes.sort(Comparator.comparingInt(p -> p.arrivalTime));
+
+        Queue<Process> queue = new LinkedList<>();
+        int currentTime = 0, completed = 0;
+        boolean[] visited = new boolean[processes.size()];
+        double totalWaiting = 0, totalTurnaround = 0;
+
+        while (completed < processes.size()) {
+            for (int i = 0; i < processes.size(); i++) {
+                Process p = processes.get(i);
+                if (p.arrivalTime <= currentTime && !visited[i]) {
+                    queue.add(p);
+                    visited[i] = true;
+                }
+            }
+
+            if (queue.isEmpty()) {
+                currentTime++;
+                continue;
+            }
+
+            Process p = queue.poll();
+            int execTime = Math.min(p.remainingTime, timeQuantum);
+            currentTime += execTime;
+            p.remainingTime -= execTime;
+
+            // Add newly arrived processes during this execution
+            for (int i = 0; i < processes.size(); i++) {
+                Process newP = processes.get(i);
+                if (newP.arrivalTime <= currentTime && !visited[i]) {
+                    queue.add(newP);
+                    visited[i] = true;
+                }
+            }
+
+            if (p.remainingTime > 0)
+                queue.add(p); // not finished, add back to queue
+            else {
+                p.completionTime = currentTime;
+                p.turnaroundTime = p.completionTime - p.arrivalTime;
+                p.waitingTime = p.turnaroundTime - p.burstTime;
+                completed++;
+                totalWaiting += p.waitingTime;
+                totalTurnaround += p.turnaroundTime;
+            }
+        }
+
+        printResults(processes);
+    }
+
+    // ---------------- Print Results ----------------
+    public static void printResults(List<Process> processes) {
+        double totalWT = 0, totalTAT = 0;
+
+        System.out.println("\nPID\tAT\tBT\tCT\tTAT\tWT");
+        for (Process p : processes) {
+            System.out.println(p.pid + "\t" + p.arrivalTime + "\t" + p.burstTime + "\t" +
+                    p.completionTime + "\t" + p.turnaroundTime + "\t" + p.waitingTime);
+            totalWT += p.waitingTime;
+            totalTAT += p.turnaroundTime;
+        }
+
+        System.out.printf("\nAverage Waiting Time: %.2f", totalWT / processes.size());
+        System.out.printf("\nAverage Turnaround Time: %.2f\n", totalTAT / processes.size());
+    }
+}

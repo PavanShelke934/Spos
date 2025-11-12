@@ -1,0 +1,173 @@
+import java.util.*;
+
+class Symbol {
+    String symbol;
+    int address;
+
+    Symbol(String symbol, int address) {
+        this.symbol = symbol;
+        this.address = address;
+    }
+}
+
+class Literal {
+    String literal;
+    int address;
+
+    Literal(String literal) {
+        this.literal = literal;
+        this.address = -1;
+    }
+}
+
+public class Q1 {
+    static int lc = 0;
+    static List<Symbol> symtab = new ArrayList<>();
+    static List<Literal> littab = new ArrayList<>();
+    static List<Integer> pooltab = new ArrayList<>();
+    static int poolPtr = 0;
+
+    static String[][] mot = {
+            {"STOP", "00"}, {"ADD", "01"}, {"SUB", "02"}, {"MULT", "03"}, {"MOVER", "04"},
+            {"MOVEM", "05"}, {"COMP", "06"}, {"BC", "07"}, {"DIV", "08"}, {"READ", "09"}, {"PRINT", "10"}
+    };
+
+    public static void main(String[] args) {
+        String[] code = {
+                "START 100",
+                "A DS 3",
+                "L1 MOVER AREG, B",
+                "ADD AREG, C",
+                "MOVEM AREG, ='2'",
+                "MOVEM AREG, ='3'",
+                "D EQU A+1",
+                "LTORG",
+                "L2 PRINT D",
+                "MOVEM AREG, ='4'",
+                "MOVEM AREG, ='5'",
+                "ORIGIN L2+1",
+                "LTORG",
+                "B DC '19'",
+                "C DC '17'",
+                "END"
+        };
+
+        passOne(code);
+        printTables();
+    }
+
+    static void passOne(String[] code) {
+        pooltab.add(0); // first pool starts at 0
+
+        for (String line : code) {
+            String[] parts = line.split("[ ,]+");
+            if (parts.length == 0) continue;
+
+            if (parts[0].equalsIgnoreCase("START")) {
+                lc = Integer.parseInt(parts[1]);
+            } else if (parts[0].equalsIgnoreCase("END")) {
+                processLiterals();
+            } else if (parts[0].equalsIgnoreCase("LTORG")) {
+                processLiterals();
+                pooltab.add(littab.size());
+            } else if (parts[0].equalsIgnoreCase("ORIGIN")) {
+                lc = evaluateExpression(parts[1]);
+            } else if (parts[0].equalsIgnoreCase("EQU")) {
+                int val = evaluateExpression(parts[2]);
+                updateSymbol(parts[1], val);
+            } else if (parts.length > 1 && parts[1].equalsIgnoreCase("DS")) {
+                addSymbol(parts[0], lc);
+                lc += Integer.parseInt(parts[2]);
+            } else if (parts.length > 1 && parts[1].equalsIgnoreCase("DC")) {
+                addSymbol(parts[0], lc);
+                lc++;
+            } else {
+                int index = 0;
+                // label handling
+                if (!isMnemonic(parts[0])) {
+                    addSymbol(parts[0], lc);
+                    index = 1;
+                }
+
+                // literal handling
+                for (int i = index + 1; i < parts.length; i++) {
+                    if (parts[i].startsWith("='")) {
+                        littab.add(new Literal(parts[i]));
+                    }
+                }
+
+                lc++;
+            }
+        }
+    }
+
+    static boolean isMnemonic(String word) {
+        for (String[] m : mot) {
+            if (m[0].equalsIgnoreCase(word))
+                return true;
+        }
+        return false;
+    }
+
+    static void addSymbol(String symbol, int addr) {
+        for (Symbol s : symtab)
+            if (s.symbol.equals(symbol)) return;
+        symtab.add(new Symbol(symbol, addr));
+    }
+
+    static void updateSymbol(String symbol, int addr) {
+        for (Symbol s : symtab)
+            if (s.symbol.equals(symbol)) {
+                s.address = addr;
+                return;
+            }
+        symtab.add(new Symbol(symbol, addr));
+    }
+
+    static int evaluateExpression(String exp) {
+        if (exp.contains("+")) {
+            String[] parts = exp.split("\\+");
+            return getSymbolAddress(parts[0]) + Integer.parseInt(parts[1]);
+        } else if (exp.contains("-")) {
+            String[] parts = exp.split("-");
+            return getSymbolAddress(parts[0]) - Integer.parseInt(parts[1]);
+        } else {
+            try {
+                return Integer.parseInt(exp);
+            } catch (Exception e) {
+                return getSymbolAddress(exp);
+            }
+        }
+    }
+
+    static int getSymbolAddress(String symbol) {
+        for (Symbol s : symtab)
+            if (s.symbol.equals(symbol))
+                return s.address;
+        return 0;
+    }
+
+    static void processLiterals() {
+        for (int i = pooltab.get(pooltab.size() - 1); i < littab.size(); i++) {
+            littab.get(i).address = lc++;
+        }
+    }
+
+    static void printTables() {
+        System.out.println("\n--- SYMBOL TABLE ---");
+        System.out.println("Symbol\tAddress");
+        for (Symbol s : symtab)
+            System.out.println(s.symbol + "\t" + s.address);
+
+        System.out.println("\n--- LITERAL TABLE ---");
+        System.out.println("Literal\tAddress");
+        for (Literal l : littab)
+            System.out.println(l.literal + "\t" + l.address);
+
+        System.out.println("\n--- POOL TABLE ---");
+        System.out.println("Pool Index");
+        for (int p : pooltab)
+            System.out.println(p);
+    }
+}
+

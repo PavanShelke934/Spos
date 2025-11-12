@@ -1,0 +1,95 @@
+import java.util.*;
+
+public class Q13 {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        // Take user input
+        System.out.print("Enter number of pages in reference string: ");
+        int n = sc.nextInt();
+        int pages[] = new int[n];
+        System.out.println("Enter the page reference string:");
+        for (int i = 0; i < n; i++) {
+            pages[i] = sc.nextInt();
+        }
+
+        System.out.print("Enter number of frames: ");
+        int frames = sc.nextInt();
+
+        System.out.println("\n===== FIFO Page Replacement =====");
+        fifo(pages, frames);
+
+        System.out.println("\n===== OPTIMAL Page Replacement =====");
+        optimal(pages, frames);
+
+        sc.close();
+    }
+
+    // ---------------- FIFO Algorithm ----------------
+    public static void fifo(int[] pages, int frames) {
+        Queue<Integer> queue = new LinkedList<>();
+        Set<Integer> set = new HashSet<>();
+        int pageFaults = 0;
+
+        for (int page : pages) {
+            if (!set.contains(page)) {
+                if (set.size() == frames) {
+                    int removed = queue.poll();
+                    set.remove(removed);
+                }
+                set.add(page);
+                queue.add(page);
+                pageFaults++;
+            }
+            System.out.println("Page: " + page + " -> Frames: " + queue);
+        }
+
+        System.out.println("Total Page Faults (FIFO): " + pageFaults);
+    }
+
+    // ---------------- OPTIMAL Algorithm ----------------
+    public static void optimal(int[] pages, int frames) {
+        List<Integer> frameList = new ArrayList<>();
+        int pageFaults = 0;
+
+        for (int i = 0; i < pages.length; i++) {
+            int page = pages[i];
+
+            if (!frameList.contains(page)) {
+                if (frameList.size() < frames) {
+                    frameList.add(page);
+                } else {
+                    int indexToReplace = findOptimal(frameList, pages, i + 1);
+                    frameList.set(indexToReplace, page);
+                }
+                pageFaults++;
+            }
+            System.out.println("Page: " + page + " -> Frames: " + frameList);
+        }
+
+        System.out.println("Total Page Faults (OPTIMAL): " + pageFaults);
+    }
+
+    // Helper function for Optimal Algorithm
+    private static int findOptimal(List<Integer> frames, int[] pages, int currentIndex) {
+        int farthest = currentIndex, indexToReplace = -1;
+
+        for (int i = 0; i < frames.size(); i++) {
+            int page = frames.get(i);
+            int j;
+            for (j = currentIndex; j < pages.length; j++) {
+                if (pages[j] == page) {
+                    if (j > farthest) {
+                        farthest = j;
+                        indexToReplace = i;
+                    }
+                    break;
+                }
+            }
+            if (j == pages.length) // page not used again
+                return i;
+        }
+
+        return (indexToReplace == -1) ? 0 : indexToReplace;
+    }
+}
